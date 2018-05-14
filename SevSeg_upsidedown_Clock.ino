@@ -37,11 +37,11 @@ void setup() {
 
   // RealTime clock init
   // ==========================
-  time.begin(RTC_DS1302, A0, A1, A2); // на базе чипа DS1302, вывод RST, вывод CLK, вывод DAT
-  //  запись даты и времени, если год == 0
+  time.begin(RTC_DS1302, A0, A1, A2); // DS1302 chip, pinout - RST, CLK, DAT
 
+  //  write time to RTC module
   if (init_time) {
-    //           сек, мин, час, число, месяц, год, день недели
+    //           sec, min, hour, day, month, year, weekday (sunday - 0)
     time.settime( 0,   33,  22,   12,    5,    18,    7);
   }
 }
