@@ -1,5 +1,6 @@
 SevSeg	KEYWORD1
 setNumber	KEYWORD2
+setDots	KEYWORD2
 refreshDisplay	KEYWORD2
 setBrightness	KEYWORD2
 COMMON_CATHODE	LITERAL1

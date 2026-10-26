@@ -39,6 +39,12 @@
 #define BLANK 10 // Must match with 'digitCodeMap', defined in 'setDigitCodes' 
 #define DASH 11
 
+// Timer refresh: Timer2 with prescaler 64 counts 4 us ticks,
+// each segment gets one step of 250 ticks = 1 ms, the whole display 8 ms
+#define TIMER_STEP_TICKS 250
+
+static SevSeg* timerInstance = 0;
+
 
 const long SevSeg::powersOf10[] = {
   1, // 10^0
@@ -59,6 +65,9 @@ SevSeg::SevSeg()
 {
   // Initial value
   ledOnTime = 2000; // Corresponds to a brightness of 100
+  timerOnTicks = TIMER_STEP_TICKS - 2;
+  timerMode = false;
+  timerSegment = 0;
   numDigits = 0;
 }
 
@@ -190,6 +199,83 @@ void SevSeg::refreshDisplay(){
 void SevSeg::setBrightness(int brightness){
   brightness = constrain(brightness, 0, 100);
   ledOnTime = map(brightness, 0, 100, 1, 2000);
+
+  // Segments are turned off on compare B, it must come before the step end
+  timerOnTicks = map(brightness, 0, 100, 1, TIMER_STEP_TICKS - 2);
+  if (timerMode) OCR2B = timerOnTicks;
+}
+
+
+// beginTimerRefresh
+/******************************************************************************/
+// Starts Timer2: compare A starts the step of the next segment and turns it on,
+// compare B turns it off. So the display does not depend on the main loop.
+
+void SevSeg::beginTimerRefresh(){
+  timerInstance = this;
+  timerSegment = 0;
+  timerMode = true;
+
+  noInterrupts();
+  TCCR2A = _BV(WGM21);              // CTC mode, TOP = OCR2A
+  TCCR2B = _BV(CS22);               // Prescaler 64
+  OCR2A = TIMER_STEP_TICKS - 1;
+  OCR2B = timerOnTicks;
+  TCNT2 = 0;
+  TIFR2 = _BV(OCF2A) | _BV(OCF2B);  // Clear pending interrupts
+  TIMSK2 = _BV(OCIE2A) | _BV(OCIE2B);
+  interrupts();
+}
+
+#if !(RESISTORS_ON_SEGMENTS)
+// One step lights one segment on all digits that need it
+void SevSeg::timerSegmentOn(){
+  digitalWrite(segmentPins[timerSegment], segmentOn);
+  for (byte digitNum=0 ; digitNum < numDigits ; digitNum++){
+    if (digitCodes[digitNum] & (1 << timerSegment)) {
+      digitalWrite(digitPins[digitNum], digitOn);
+    }
+  }
+}
+
+void SevSeg::timerSegmentOff(){
+  for (byte digitNum=0 ; digitNum < numDigits ; digitNum++){
+    digitalWrite(digitPins[digitNum], digitOff);
+  }
+  digitalWrite(segmentPins[timerSegment], segmentOff);
+
+  timerSegment++;
+  if (timerSegment >= 8) timerSegment = 0;
+}
+
+#else
+// One step lights all needed segments of one digit
+void SevSeg::timerSegmentOn(){
+  digitalWrite(digitPins[timerSegment], digitOn);
+  for (byte segmentNum=0 ; segmentNum < 8 ; segmentNum++) {
+    if (digitCodes[timerSegment] & (1 << segmentNum)) {
+      digitalWrite(segmentPins[segmentNum], segmentOn);
+    }
+  }
+}
+
+void SevSeg::timerSegmentOff(){
+  for (byte segmentNum=0 ; segmentNum < 8 ; segmentNum++) {
+    digitalWrite(segmentPins[segmentNum], segmentOff);
+  }
+  digitalWrite(digitPins[timerSegment], digitOff);
+
+  timerSegment++;
+  if (timerSegment >= numDigits) timerSegment = 0;
+}
+#endif
+
+ISR(TIMER2_COMPA_vect){
+  if (timerInstance) timerInstance->timerSegmentOn();
+}
+
+ISR(TIMER2_COMPB_vect){
+  if (timerInstance) timerInstance->timerSegmentOff();
 }
 
 
@@ -235,6 +321,23 @@ void SevSeg::setNumber(float numToShow, byte decPlaces) //float
   // Modify the number so that it is rounded to an integer correctly
   numToShow += (numToShow >= 0) ? 0.5f : -0.5f;
   setNewNum(numToShow, decPlaces);
+}
+
+
+// setDots
+/******************************************************************************/
+// Turns decimal points on or off independently of the number shown.
+// Must be called after 'setNumber', which resets the decimal points.
+
+void SevSeg::setDots(byte dotMask){
+  for (byte digitNum = 0 ; digitNum < numDigits ; digitNum++) {
+    if (dotMask & (1 << digitNum)) {
+      digitCodes[digitNum] |= B10000000;
+    }
+    else {
+      digitCodes[digitNum] &= ~B10000000;
+    }
+  }
 }
 
 

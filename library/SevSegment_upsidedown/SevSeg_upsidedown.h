@@ -54,6 +54,14 @@ public:
   void begin(byte hardwareConfig, byte numDigitsIn, byte digitPinsIn[], byte segmentPinsIn[]);
   void setBrightness(int brightnessIn); // A number from 0..100
 
+  // Refresh the display from the Timer2 interrupt (ATmega328),
+  // 'refreshDisplay' must not be called after this.
+  // Brightness then is the part of the time each segment is lit.
+  // Timer2 is also used by tone(), so it can't be used together with this.
+  void beginTimerRefresh();
+  void timerSegmentOn();  // Called from the Timer2 interrupts
+  void timerSegmentOff();
+
   void setNumber(long numToShow, byte decPlaces);
   void setNumber(unsigned long numToShow, byte decPlaces);
   void setNumber(int numToShow, byte decPlaces);
@@ -61,6 +69,7 @@ public:
   void setNumber(char numToShow, byte decPlaces);
   void setNumber(byte numToShow, byte decPlaces);
   void setNumber(float numToShow, byte decPlaces);
+  void setDots(byte dotMask); // Bit N lights the decimal point of digit N
 
 private:
   void setNewNum(long numToShow, byte decPlaces);
@@ -73,6 +82,9 @@ private:
   byte numDigits;
   byte digitCodes[MAXNUMDIGITS];
   int ledOnTime;
+  boolean timerMode;
+  byte timerOnTicks;
+  byte timerSegment;
   const static long powersOf10[10];
 
 };
